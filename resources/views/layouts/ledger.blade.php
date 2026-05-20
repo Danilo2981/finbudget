@@ -100,6 +100,14 @@
                 <span class="material-symbols-outlined" data-icon="history" {{ request()->routeIs('historical-financials') ? 'style=font-variation-settings:\'FILL\' 1;' : '' }}>history</span>
                 <span class="text-sm {{ request()->routeIs('historical-financials') ? 'font-semibold' : '' }}">Histórico Financiero</span>
             </a>
+            <a class="{{ request()->routeIs('historical-portfolio') ? 'flex items-center gap-3 pl-8 pr-4 py-2 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 pl-8 pr-4 py-2 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('historical-portfolio') }}">
+                <span class="material-symbols-outlined text-sm" data-icon="account_balance" {{ request()->routeIs('historical-portfolio') ? 'style="font-variation-settings: \'FILL\' 1;"' : '' }}>account_balance</span>
+                <span class="text-xs {{ request()->routeIs('historical-portfolio') ? 'font-semibold' : '' }}">Histórico Cartera de Créditos</span>
+            </a>
+            <a class="{{ request()->routeIs('recup-prov') ? 'flex items-center gap-3 px-4 py-3 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 px-4 py-3 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('recup-prov') }}">
+                <span class="material-symbols-outlined" data-icon="shield_with_heart" {{ request()->routeIs('recup-prov') ? 'style="font-variation-settings: \'FILL\' 1;"' : '' }}>shield_with_heart</span>
+                <span class="text-sm {{ request()->routeIs('recup-prov') ? 'font-semibold' : '' }}">Recuperaciones y Provisiones</span>
+            </a>
             <a class="{{ request()->routeIs('portfolio') ? 'flex items-center gap-3 px-4 py-3 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 px-4 py-3 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('portfolio') }}">
                 <span class="material-symbols-outlined" data-icon="show_chart">show_chart</span>
                 <span class="text-sm">Proyección Cartera</span>
