@@ -113,78 +113,85 @@ class ProvisionEngine
     }
 
     /**
-     * Simula la proyección de provisiones y gastos mes a mes para el año de presupuesto.
+     * Simula la proyección de provisiones leyendo desde master_budget_records (regresión estadística).
+     * El punto de arranque (diciembre año anterior) se proyecta con la misma regresión lineal.
      */
-    public function simulate(array $ratios, $budgetYear)
+    public function simulate($budgetYear)
     {
+        // Ratios de cobertura calculados sobre toda la historia disponible
         $histData = $this->calculateHistoricalData();
-        $initialProvisions = $histData['provisions'];
+        $ratios   = $histData['ratios'];
 
-        $results = [];
+        // Punto de arranque: calculado con el mismo método (cartera_hist × ratio) para que sea
+        // consistente con la proyección. Usar el saldo histórico real produciría un salto en enero
+        // igual a la diferencia entre el método de provisión real de la institución y este modelo.
+        $prevProvisions = [
+            'productive'   => ($histData['portfolio']['productive']   ?? 0) * $ratios['productive'],
+            'consumer'     => ($histData['portfolio']['consumer']     ?? 0) * $ratios['consumer'],
+            'microcredit'  => ($histData['portfolio']['microcredit']  ?? 0) * $ratios['microcredit'],
+            'refinanced'   => ($histData['portfolio']['refinanced']   ?? 0) * $ratios['refinanced'],
+            'restructured' => ($histData['portfolio']['restructured'] ?? 0) * $ratios['restructured'],
+        ];
 
-        // Definir códigos para cartera por segmento
+        // Cuentas fijas: su saldo real del último período histórico, sin variar
+        $fixedProvisions = [
+            'anticiclica' => $histData['provisions']['anticiclica'] ?? 0,
+            'noreversada' => $histData['provisions']['noreversada'] ?? 0,
+            'voluntaria'  => $histData['provisions']['voluntaria']  ?? 0,
+            'tecnologia'  => abs((float) FinancialHistory::where('año', $histData['año'])
+                                ->where('mes',  $histData['mes'])
+                                ->where('codigo', '149980')
+                                ->value('saldo')),
+        ];
+
+        // Cartera proyectada por segmento desde master_budget_records (regresión estadística)
         $segmentCodes = [
-            'productive' => ['1401', '1449', '1425'],
-            'consumer' => ['1402', '1426', '1450'],
-            'microcredit' => ['1404', '1428', '1452'],
-            'refinanced' => ['1410', '1412', '1434', '1436', '1458', '1460'],
+            'productive'   => ['1401', '1449', '1425'],
+            'consumer'     => ['1402', '1426', '1450'],
+            'microcredit'  => ['1404', '1428', '1452'],
+            'refinanced'   => ['1410', '1412', '1434', '1436', '1458', '1460'],
             'restructured' => ['1418', '1420', '1442', '1444', '1466', '1468'],
         ];
 
-        // Obtener saldos proyectados de cartera en master_budget_records agrupados por mes
-        $portfolioProjected = [];
-        for ($m = 1; $m <= 12; $m++) {
-            $portfolioProjected[$m] = [];
-            foreach ($segmentCodes as $segment => $codes) {
-                $portfolioProjected[$m][$segment] = (float) MasterBudgetRecord::where('año', $budgetYear)
-                    ->where('mes', $m)
-                    ->whereIn('codigo', $codes)
-                    ->sum('saldo');
-            }
-        }
-
-        // Saldos acumulados iniciales (Diciembre año anterior)
-        $prevProvisions = [
-            'productive' => $initialProvisions['productive'] ?? 4698.86,
-            'consumer' => $initialProvisions['consumer'] ?? 514259.37,
-            'microcredit' => $initialProvisions['microcredit'] ?? 224495.77,
-            'refinanced' => $initialProvisions['refinanced'] ?? 19986.80,
-            'restructured' => $initialProvisions['restructured'] ?? 15798.23,
-        ];
+        $results = [];
 
         for ($m = 1; $m <= 12; $m++) {
             $monthData = [
-                'mes' => $m,
-                'portfolio' => $portfolioProjected[$m],
+                'mes'             => $m,
+                'portfolio'       => [],
                 'provisions_acum' => [],
                 'provision_gasto' => [],
             ];
 
+            foreach ($segmentCodes as $segment => $codes) {
+                $monthData['portfolio'][$segment] = (float) MasterBudgetRecord::where('año', $budgetYear)
+                    ->where('mes', $m)
+                    ->whereIn('codigo', $codes)
+                    ->sum('saldo');
+            }
+
+            // Provisión = cartera proyectada × ratio histórico ponderado
             foreach ($ratios as $segment => $ratio) {
-                // Provisión Acumulada Proyectada (Absoluta)
-                $cartera = $portfolioProjected[$m][$segment];
-                $acum = $cartera * $ratio;
+                $acum  = $monthData['portfolio'][$segment] * $ratio;
+                $gasto = $acum - $prevProvisions[$segment];
+
                 $monthData['provisions_acum'][$segment] = $acum;
-
-                // Gasto Provisión Mensual
-                $prev = $prevProvisions[$segment];
-                $gasto = $acum - $prev;
                 $monthData['provision_gasto'][$segment] = $gasto;
-
-                // Actualizar para el siguiente mes
                 $prevProvisions[$segment] = $acum;
             }
 
-            // Cuentas fijas sin variación de provisiones
-            $monthData['provisions_acum']['anticiclica'] = $initialProvisions['anticiclica'] ?? 29381.42;
-            $monthData['provisions_acum']['noreversada'] = $initialProvisions['noreversada'] ?? 279690.67;
-            $monthData['provisions_acum']['voluntaria'] = $initialProvisions['voluntaria'] ?? 2545.45;
+            // Cuentas fijas: saldo real del último histórico, gasto = variación vs mes anterior
+            foreach ($fixedProvisions as $segment => $baseVal) {
+                $monthData['provisions_acum'][$segment] = $baseVal;
+                $monthData['provision_gasto'][$segment] = 0;
+            }
 
             $results[$m] = $monthData;
         }
 
         return $results;
     }
+
 
     /**
      * Integra la simulación en master_budget_records y recalcula jerarquías.
@@ -199,6 +206,7 @@ class ProvisionEngine
             '14992005' => ['name' => '(PROVISION CARTERA MICROCREDITOS)', 'segment' => 'microcredit', 'type' => 'provision', 'account_type' => 'ESF', 'nivel' => 8],
             '149945'   => ['name' => '(CARTERA DE CREDITO REFINANCIADA)', 'segment' => 'refinanced', 'type' => 'provision', 'account_type' => 'ESF', 'nivel' => 6],
             '149950'   => ['name' => '(CARTERA DE CREDITO REESTRUCTURADA)', 'segment' => 'restructured', 'type' => 'provision', 'account_type' => 'ESF', 'nivel' => 6],
+            '149980'   => ['name' => '(PROVISIÓN GENÉRICA POR TECNOLOGÍA CREDITICIA)', 'segment' => 'tecnologia', 'type' => 'provision_fixed', 'account_type' => 'ESF', 'nivel' => 6],
             '149985'   => ['name' => '(PROVISION ANTICICLICA)', 'segment' => 'anticiclica', 'type' => 'provision_fixed', 'account_type' => 'ESF', 'nivel' => 6],
             '149987'   => ['name' => '(PROVISION NO REVERSADAS POR REQUER. NORMATIVO)', 'segment' => 'noreversada', 'type' => 'provision_fixed', 'account_type' => 'ESF', 'nivel' => 6],
             '149989'   => ['name' => '(PROVISION GENERICA VOLUNTARIA)', 'segment' => 'voluntaria', 'type' => 'provision_fixed', 'account_type' => 'ESF', 'nivel' => 6],
@@ -215,7 +223,7 @@ class ProvisionEngine
             // que serán re-calculadas por el rollup
             $targetCodes = array_keys($leafCodesMap);
             // También agregamos las cuentas padres directas para limpiarlas e impedir duplicados antes del Rollup
-            $parentCodesToClean = ['149905', '149910', '149920', '1499', '4402', '44']; 
+            $parentCodesToClean = ['149905', '149910', '149920', '14998', '1499', '4402', '44'];
             
             MasterBudgetRecord::where('año', $budgetYear)
                 ->whereIn('codigo', array_merge($targetCodes, $parentCodesToClean))

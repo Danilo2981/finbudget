@@ -5,14 +5,25 @@
             <h2 class="text-2xl font-extrabold text-on-surface tracking-tight">Simulador de Recuperaciones y Provisiones</h2>
             <p class="text-slate-500 text-sm mt-1">Simula las provisiones de cartera de crédito y calcula el gasto mensual para integrarlo al Presupuesto Maestro {{ $budgetYear }}.</p>
         </div>
-        <div>
-            <button 
-                wire:click="integrate" 
+        <div class="flex items-center gap-3">
+            <button
+                wire:click="calculate"
                 wire:loading.attr="disabled"
+                wire:target="calculate"
+                class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-5 py-3 rounded-xl shadow-sm hover:shadow transition-all duration-200"
+            >
+                <span wire:loading wire:target="calculate" class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" role="status"></span>
+                <span wire:loading.remove wire:target="calculate" class="material-symbols-outlined text-lg">play_arrow</span>
+                <span>Simular</span>
+            </button>
+            <button
+                wire:click="integrate"
+                wire:loading.attr="disabled"
+                wire:target="integrate"
                 class="flex items-center gap-2 bg-[#001736] hover:bg-[#002b5b] text-[#85f8c4] font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
             >
-                <span wire:loading class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" role="status"></span>
-                <span wire:loading.remove class="material-symbols-outlined text-lg">check_circle</span>
+                <span wire:loading wire:target="integrate" class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" role="status"></span>
+                <span wire:loading.remove wire:target="integrate" class="material-symbols-outlined text-lg">check_circle</span>
                 <span>Integrar al Presupuesto Maestro</span>
             </button>
         </div>
@@ -713,6 +724,148 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Provisión Acumulada Histórica -->
+    @php $histProv = $this->historicalProvisionsDetail; @endphp
+    <div class="bg-white dark:bg-[#0b132b] p-6 rounded-2xl shadow-sm border border-slate-200/40 space-y-5">
+        <div>
+            <h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary dark:text-[#85f8c4]">history</span>
+                PROVISIÓN ACUMULADA HISTÓRICA
+                @if($histProv['yearRange'])
+                    <span class="text-sm font-normal text-slate-400">({{ $histProv['yearRange'] }})</span>
+                @endif
+            </h3>
+            <p class="text-slate-400 text-xs mt-1">Promedio mensual ponderado de todos los años disponibles. El ratio es Σ provisión / Σ cartera por mes, acumulando todos los períodos.</p>
+        </div>
+
+        @if(!empty($histProv['rows']))
+            <div class="overflow-x-auto rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+                <table class="w-full text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100/80 dark:bg-slate-900 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
+                            <th class="p-3 text-left sticky left-0 z-10 bg-slate-100 dark:bg-slate-900 min-w-[220px]">Cuenta</th>
+                            <th class="p-3 text-center text-[9px] text-slate-400">Código</th>
+                            @foreach(['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'] as $mon)
+                                <th class="p-3 text-right min-w-[90px]">{{ $mon }}</th>
+                            @endforeach
+                            <th class="p-3 text-right min-w-[100px] bg-slate-200/60 dark:bg-slate-800">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+
+                        {{-- Filas de saldo promedio por cuenta --}}
+                        @foreach($histProv['rows'] as $row)
+                            @php
+                                $allNull = collect($row['months'])->every(fn($v) => $v === null || $v == 0);
+                                $rowTotal = collect($row['months'])->sum();
+                            @endphp
+                            <tr class="hover:bg-slate-50/30 dark:hover:bg-slate-800/10 {{ $allNull ? 'opacity-40' : '' }}">
+                                <td class="p-3 font-medium text-slate-700 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-[#0b132b]">
+                                    {{ $row['label'] }}
+                                </td>
+                                <td class="p-3 text-center font-mono text-slate-400 text-[10px]">{{ $row['code'] }}</td>
+                                @for($m = 1; $m <= 12; $m++)
+                                    @php $val = $row['months'][$m] ?? null; @endphp
+                                    <td class="p-3 text-right tabular-nums {{ $val !== null && $val != 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400' }}">
+                                        {{ $val !== null && $val != 0 ? number_format($val, 0, '.', ',') : '—' }}
+                                    </td>
+                                @endfor
+                                <td class="p-3 text-right tabular-nums font-bold bg-slate-50 dark:bg-slate-800/40 {{ $rowTotal != 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                                    {{ $rowTotal != 0 ? number_format($rowTotal, 0, '.', ',') : '—' }}
+                                </td>
+                            </tr>
+                        @endforeach
+
+                        {{-- Fila total de provisiones --}}
+                        @php
+                            $colTotals = array_fill(1, 12, 0.0);
+                            foreach ($histProv['rows'] as $r) {
+                                for ($m = 1; $m <= 12; $m++) {
+                                    $colTotals[$m] += ($r['months'][$m] ?? 0);
+                                }
+                            }
+                            $grandTotal = array_sum($colTotals);
+                        @endphp
+                        <tr class="bg-slate-100/80 dark:bg-slate-900 font-extrabold border-t-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+                            <td class="p-3 sticky left-0 z-10 bg-slate-100 dark:bg-slate-900" colspan="2">TOTAL PROVISIONES</td>
+                            @for($m = 1; $m <= 12; $m++)
+                                <td class="p-3 text-right tabular-nums {{ $colTotals[$m] != 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                                    {{ $colTotals[$m] != 0 ? number_format($colTotals[$m], 0, '.', ',') : '—' }}
+                                </td>
+                            @endfor
+                            <td class="p-3 text-right tabular-nums bg-slate-200/60 dark:bg-slate-800 {{ $grandTotal != 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                                {{ $grandTotal != 0 ? number_format($grandTotal, 0, '.', ',') : '—' }}
+                            </td>
+                        </tr>
+
+                        {{-- Separador ratio --}}
+                        <tr class="bg-amber-50/60 dark:bg-amber-950/20">
+                            <td colspan="15" class="px-3 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                                Ratio ponderado mensual — Σ provisión / Σ cartera (todos los años)
+                            </td>
+                        </tr>
+
+                        {{-- Filas de ratio ponderado por segmento --}}
+                        @foreach($histProv['ratioRows'] as $rr)
+                            @php
+                                $validPcts = collect($rr['months'])->filter(fn($v) => $v !== null);
+                                $avgPct    = $validPcts->count() > 0 ? $validPcts->avg() : null;
+                            @endphp
+                            <tr class="bg-amber-50/30 dark:bg-amber-950/10 hover:bg-amber-50/50 dark:hover:bg-amber-950/20">
+                                <td class="p-3 font-semibold text-amber-700 dark:text-amber-400 sticky left-0 z-10 bg-amber-50 dark:bg-[#1a120a]" colspan="2">
+                                    {{ $rr['label'] }}
+                                </td>
+                                @for($m = 1; $m <= 12; $m++)
+                                    @php $pct = $rr['months'][$m]; @endphp
+                                    <td class="p-3 text-right tabular-nums text-amber-700 dark:text-amber-400 font-medium">
+                                        {{ $pct !== null ? number_format($pct, 2) . '%' : '—' }}
+                                    </td>
+                                @endfor
+                                <td class="p-3 text-right tabular-nums font-bold bg-amber-100/60 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300">
+                                    {{ $avgPct !== null ? number_format($avgPct, 2) . '%' : '—' }}
+                                </td>
+                            </tr>
+                        @endforeach
+
+                    </tbody>
+                </table>
+            </div>
+        @else
+            <div class="p-6 text-center text-slate-400 italic text-sm">
+                No hay datos históricos de provisiones disponibles.
+            </div>
+        @endif
+
+        {{-- Ratio global (todos los meses × todos los años) --}}
+        @if(!empty($histProv['globalRatios']))
+            <div class="border-t border-slate-200/40 dark:border-slate-700/40 pt-4 space-y-3">
+                <div class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm text-primary dark:text-[#85f8c4]">calculate</span>
+                    RATIO GLOBAL — valor aplicado en la simulación
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    @foreach($histProv['globalRatios'] as $gr)
+                        <div class="bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-700/30 rounded-xl p-3 text-center">
+                            <div class="text-[10px] text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1">{{ $gr['label'] }}</div>
+                            <div class="text-xl font-extrabold text-amber-700 dark:text-amber-300">{{ number_format($gr['ratio'], 2) }}%</div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+        {{-- Explicación metodológica --}}
+        <div class="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/40 rounded-xl p-4 text-xs text-blue-900 dark:text-blue-300 space-y-2">
+            <div class="font-bold flex items-center gap-1">
+                <span class="material-symbols-outlined text-base">info</span>
+                ¿Cómo se calcula el ratio y cómo se usa en la simulación?
+            </div>
+            <p><strong>Saldo promedio:</strong> Para cada cuenta y mes se promedia el saldo real de todos los años disponibles. Refleja el nivel típico de provisión de la institución en ese mes del año.</p>
+            <p><strong>Ratio mensual ponderado:</strong> <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Σ_años provisión[mes] / Σ_años cartera[mes]</code>. Los años con mayor volumen de cartera pesan más automáticamente, sin necesidad de asignar pesos explícitos.</p>
+            <p><strong>Ratio global (tarjetas):</strong> Igual pero acumulando todos los meses y todos los años: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Σ_todos provisión / Σ_todos cartera</code>. Es el escalar que multiplica la cartera proyectada en cada mes del presupuesto: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Provisión proyectada = Cartera proyectada × Ratio global</code>.</p>
         </div>
     </div>
 

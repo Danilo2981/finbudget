@@ -380,31 +380,12 @@ class RecupProvSimulator extends Component
 
 
     /**
-     * Ejecuta la simulación con los ratios provistos.
+     * Ejecuta la simulación leyendo provisiones proyectadas estadísticamente desde master_budget_records.
      */
     public function calculate()
     {
-        // Validar entradas
-        $this->validate([
-            'productiveRatio' => 'required|numeric|min:0|max:100',
-            'consumerRatio' => 'required|numeric|min:0|max:100',
-            'microcreditRatio' => 'required|numeric|min:0|max:100',
-            'refinancedRatio' => 'required|numeric|min:0|max:100',
-            'restructuredRatio' => 'required|numeric|min:0|max:100',
-        ]);
-
         $engine = new ProvisionEngine();
-
-        // Convertir de porcentajes a decimales
-        $ratios = [
-            'productive' => $this->productiveRatio / 100,
-            'consumer' => $this->consumerRatio / 100,
-            'microcredit' => $this->microcreditRatio / 100,
-            'refinanced' => $this->refinancedRatio / 100,
-            'restructured' => $this->restructuredRatio / 100,
-        ];
-
-        $this->simulationResults = $engine->simulate($ratios, $this->budgetYear);
+        $this->simulationResults = $engine->simulate($this->budgetYear);
     }
 
     /**
@@ -436,6 +417,95 @@ class RecupProvSimulator extends Component
         $this->calculate();
         
         session()->flash('success', 'Ratios de cobertura restaurados al baseline histórico.');
+    }
+
+    public function getHistoricalProvisionsDetailProperty()
+    {
+        $provCodes = [
+            '14990505' => 'Cartera Productiva',
+            '14991005' => 'Cartera Consumo',
+            '14992005' => 'Cartera Microcrédito',
+            '149945'   => 'Cartera Refinanciada',
+            '149950'   => 'Cartera Reestructurada',
+            '149980'   => 'Prov. Tecnología Crediticia',
+            '149985'   => 'Prov. Anticíclica',
+            '149987'   => 'Prov. No Reversada',
+            '149989'   => 'Prov. Genérica Voluntaria',
+        ];
+
+        $segments = [
+            'productive'   => ['label' => 'Ratio Productivo',     'prov' => '14990505', 'portfolio' => ['1401', '1449', '1425']],
+            'consumer'     => ['label' => 'Ratio Consumo',        'prov' => '14991005', 'portfolio' => ['1402', '1426', '1450']],
+            'microcredit'  => ['label' => 'Ratio Microcrédito',   'prov' => '14992005', 'portfolio' => ['1404', '1428', '1452']],
+            'refinanced'   => ['label' => 'Ratio Refinanciada',   'prov' => '149945',   'portfolio' => ['1410', '1412', '1434', '1436', '1458', '1460']],
+            'restructured' => ['label' => 'Ratio Reestructurada', 'prov' => '149950',   'portfolio' => ['1418', '1420', '1442', '1444', '1466', '1468']],
+        ];
+
+        $years = FinancialHistory::whereIn('codigo', array_keys($provCodes))
+            ->distinct()->pluck('año')->toArray();
+
+        if (empty($years)) return ['rows' => [], 'ratioRows' => [], 'globalRatios' => [], 'yearRange' => ''];
+
+        $yearRange = min($years) . '–' . max($years);
+
+        // Provisiones: acumular suma y conteo por código+mes para promediar
+        $allProv = FinancialHistory::whereIn('codigo', array_keys($provCodes))
+            ->get(['codigo', 'mes', 'saldo']);
+
+        $provSum   = [];  // [codigo][mes] => suma
+        $provCount = [];  // [codigo][mes] => conteo de años con dato
+        foreach ($allProv as $rec) {
+            $provSum[$rec->codigo][$rec->mes]   = ($provSum[$rec->codigo][$rec->mes]   ?? 0) + (float) $rec->saldo;
+            $provCount[$rec->codigo][$rec->mes] = ($provCount[$rec->codigo][$rec->mes] ?? 0) + 1;
+        }
+
+        // Cartera: acumular suma por código+mes para el ratio ponderado
+        $allPortCodes = array_merge(...array_column(array_values($segments), 'portfolio'));
+        $allPort = FinancialHistory::whereIn('codigo', $allPortCodes)->get(['codigo', 'mes', 'saldo']);
+
+        $portSum = [];  // [codigo][mes] => suma acumulada de todos los años
+        foreach ($allPort as $rec) {
+            $portSum[$rec->codigo][$rec->mes] = ($portSum[$rec->codigo][$rec->mes] ?? 0) + (float) $rec->saldo;
+        }
+
+        // Filas de provisión: promedio mensual ponderado por número de años
+        $rows = [];
+        foreach ($provCodes as $code => $label) {
+            $row = ['label' => $label, 'code' => $code, 'months' => array_fill(1, 12, null)];
+            for ($m = 1; $m <= 12; $m++) {
+                $cnt = $provCount[$code][$m] ?? 0;
+                $row['months'][$m] = $cnt > 0 ? (($provSum[$code][$m] ?? 0) / $cnt) : null;
+            }
+            $rows[] = $row;
+        }
+
+        // Filas de ratio: Σ_años(provisión[m]) / Σ_años(cartera[m]) por mes — ponderado por volumen
+        $ratioRows = [];
+        foreach ($segments as $segMeta) {
+            $ratioRow = ['label' => $segMeta['label'], 'months' => array_fill(1, 12, null)];
+            for ($m = 1; $m <= 12; $m++) {
+                $sumProv = abs($provSum[$segMeta['prov']][$m] ?? 0);
+                $sumPort = 0;
+                foreach ($segMeta['portfolio'] as $pc) {
+                    $sumPort += ($portSum[$pc][$m] ?? 0);
+                }
+                $ratioRow['months'][$m] = $sumPort > 0 ? ($sumProv / $sumPort * 100) : null;
+            }
+            $ratioRows[] = $ratioRow;
+        }
+
+        // Ratio global total (todos los meses × todos los años) — el que usa simulate()
+        $globalRatios = [];
+        foreach ($segments as $segMeta) {
+            $totalProv = abs((float) FinancialHistory::whereIn('codigo', [$segMeta['prov']])->sum('saldo'));
+            $totalPort = (float) FinancialHistory::whereIn('codigo', $segMeta['portfolio'])->sum('saldo');
+            $globalRatios[] = [
+                'label' => str_replace('Ratio ', '', $segMeta['label']),
+                'ratio' => $totalPort > 0 ? ($totalProv / $totalPort * 100) : 0,
+            ];
+        }
+
+        return ['rows' => $rows, 'ratioRows' => $ratioRows, 'globalRatios' => $globalRatios, 'yearRange' => $yearRange];
     }
 
     public function render()
