@@ -108,9 +108,13 @@
                 <span class="material-symbols-outlined" data-icon="shield_with_heart" {{ request()->routeIs('recup-prov') ? 'style="font-variation-settings: \'FILL\' 1;"' : '' }}>shield_with_heart</span>
                 <span class="text-sm {{ request()->routeIs('recup-prov') ? 'font-semibold' : '' }}">Recuperaciones y Provisiones</span>
             </a>
-            <a class="{{ request()->routeIs('portfolio') ? 'flex items-center gap-3 px-4 py-3 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 px-4 py-3 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('portfolio') }}">
-                <span class="material-symbols-outlined" data-icon="show_chart">show_chart</span>
-                <span class="text-sm">Proyección Cartera</span>
+            <a class="{{ request()->routeIs('proy-cart-cre') ? 'flex items-center gap-3 px-4 py-3 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 px-4 py-3 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('proy-cart-cre') }}">
+                <span class="material-symbols-outlined" data-icon="show_chart" {{ request()->routeIs('proy-cart-cre') ? 'style="font-variation-settings: \'FILL\' 1;"' : '' }}>show_chart</span>
+                <span class="text-sm {{ request()->routeIs('proy-cart-cre') ? 'font-semibold' : '' }}">Proyección Cartera</span>
+            </a>
+            <a class="{{ request()->routeIs('portfolio') ? 'flex items-center gap-3 pl-8 pr-4 py-2 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 pl-8 pr-4 py-2 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('portfolio') }}">
+                <span class="material-symbols-outlined text-sm" data-icon="tune" {{ request()->routeIs('portfolio') ? 'style="font-variation-settings: \'FILL\' 1;"' : '' }}>tune</span>
+                <span class="text-xs {{ request()->routeIs('portfolio') ? 'font-semibold' : '' }}">Parámetros de Proyección</span>
             </a>
             <!-- Active State: Budgets -->
             <a class="{{ request()->routeIs('budget') ? 'flex items-center gap-3 px-4 py-3 text-[#85f8c4] border-l-2 border-[#85f8c4] bg-white/5 transition-all duration-200' : 'flex items-center gap-3 px-4 py-3 text-slate-400 opacity-80 hover:bg-white/10 hover:text-white transition-all duration-200' }}" href="{{ route('budget') }}">

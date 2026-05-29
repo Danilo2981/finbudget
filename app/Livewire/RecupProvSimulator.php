@@ -494,14 +494,18 @@ class RecupProvSimulator extends Component
             $ratioRows[] = $ratioRow;
         }
 
-        // Ratio global total (todos los meses × todos los años) — el que usa simulate()
+        // Ratio del último mes real — es el que aplica simulate() (fórmula: prov/cartera último mes)
+        $lastYear  = FinancialHistory::max('año');
+        $lastMonth = FinancialHistory::where('año', $lastYear)->max('mes');
         $globalRatios = [];
         foreach ($segments as $segMeta) {
-            $totalProv = abs((float) FinancialHistory::whereIn('codigo', [$segMeta['prov']])->sum('saldo'));
-            $totalPort = (float) FinancialHistory::whereIn('codigo', $segMeta['portfolio'])->sum('saldo');
+            $lastProv = abs((float) FinancialHistory::where('año', $lastYear)->where('mes', $lastMonth)
+                ->whereIn('codigo', [$segMeta['prov']])->sum('saldo'));
+            $lastPort = (float) FinancialHistory::where('año', $lastYear)->where('mes', $lastMonth)
+                ->whereIn('codigo', $segMeta['portfolio'])->sum('saldo');
             $globalRatios[] = [
                 'label' => str_replace('Ratio ', '', $segMeta['label']),
-                'ratio' => $totalPort > 0 ? ($totalProv / $totalPort * 100) : 0,
+                'ratio' => $lastPort > 0 ? ($lastProv / $lastPort * 100) : 0,
             ];
         }
 

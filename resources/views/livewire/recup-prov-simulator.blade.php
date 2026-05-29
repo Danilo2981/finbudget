@@ -435,6 +435,298 @@
     </div>
 
 
+    <!-- Provisión Acumulada Proyectada -->
+    @if(!empty($simulationResults))
+    <div class="bg-white dark:bg-[#0b132b] p-6 rounded-2xl shadow-sm border border-slate-200/40 space-y-4">
+        <div>
+            <h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary dark:text-[#85f8c4]">shield</span>
+                PROVISIÓN ACUMULADA PROYECTADA {{ $budgetYear }}
+            </h3>
+            <p class="text-slate-400 text-xs mt-1">Saldo acumulado proyectado de provisiones por segmento mes a mes. Valores negativos en el Activo (cuentas 1499).</p>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+            <table class="w-full text-xs border-collapse">
+                <thead>
+                    <tr class="bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
+                        <th class="p-3 text-left sticky left-0 z-10 bg-slate-100 dark:bg-slate-900 min-w-[220px]">Segmento</th>
+                        @foreach(['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'] as $lbl)
+                            <th class="p-3 text-right min-w-[90px]">{{ $lbl }}</th>
+                        @endforeach
+                        <th class="p-3 text-right min-w-[100px] bg-slate-200/60 dark:bg-slate-800">Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+
+                    {{-- Provisiones variables --}}
+                    <tr class="bg-slate-50/60 dark:bg-slate-800/20">
+                        <td colspan="14" class="px-3 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest sticky left-0 z-10 bg-slate-50/60 dark:bg-slate-800/20">
+                            Provisiones Variables (Cartera)
+                        </td>
+                    </tr>
+
+                    @php
+                        $varSegments = [
+                            'productive'   => ['label' => 'Cartera Productiva',    'code' => '14990505'],
+                            'consumer'     => ['label' => 'Cartera Consumo',       'code' => '14991005'],
+                            'microcredit'  => ['label' => 'Cartera Microcrédito',  'code' => '14992005'],
+                            'refinanced'   => ['label' => 'Cartera Refinanciada',  'code' => '149945'],
+                            'restructured' => ['label' => 'Cartera Reestructurada','code' => '149950'],
+                        ];
+                        $varTotals = array_fill(1, 12, 0.0);
+                    @endphp
+
+                    @foreach($varSegments as $seg => $meta)
+                        @php
+                            $rowSum = 0;
+                            for ($m = 1; $m <= 12; $m++) {
+                                $v = abs($simulationResults[$m]['provisions_acum'][$seg] ?? 0);
+                                $varTotals[$m] += $v;
+                                $rowSum += $v;
+                            }
+                        @endphp
+                        <tr class="hover:bg-slate-50/30 dark:hover:bg-slate-800/10">
+                            <td class="p-3 font-medium text-slate-700 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-[#0b132b]">
+                                {{ $meta['label'] }}
+                                <span class="text-[10px] text-slate-400 font-mono ml-1">{{ $meta['code'] }}</span>
+                            </td>
+                            @for($m = 1; $m <= 12; $m++)
+                                @php $v = abs($simulationResults[$m]['provisions_acum'][$seg] ?? 0); @endphp
+                                <td class="p-3 text-right tabular-nums {{ $v > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400' }}">
+                                    {{ $v > 0 ? number_format($v, 0, '.', ',') : '—' }}
+                                </td>
+                            @endfor
+                            <td class="p-3 text-right tabular-nums font-bold bg-slate-50 dark:bg-slate-800/40 {{ $rowSum > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                                {{ $rowSum > 0 ? number_format($rowSum, 0, '.', ',') : '—' }}
+                            </td>
+                        </tr>
+                    @endforeach
+
+                    {{-- Subtotal variables --}}
+                    @php $varGrandTotal = array_sum($varTotals); @endphp
+                    <tr class="bg-slate-100/60 dark:bg-slate-900/60 font-bold border-t border-slate-200 dark:border-slate-700">
+                        <td class="p-3 text-slate-600 dark:text-slate-300 sticky left-0 z-10 bg-slate-100/60 dark:bg-slate-900/60">Subtotal Variables</td>
+                        @for($m = 1; $m <= 12; $m++)
+                            <td class="p-3 text-right tabular-nums {{ $varTotals[$m] > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                                {{ $varTotals[$m] > 0 ? number_format($varTotals[$m], 0, '.', ',') : '—' }}
+                            </td>
+                        @endfor
+                        <td class="p-3 text-right tabular-nums bg-slate-200/60 dark:bg-slate-800 {{ $varGrandTotal > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-400' }}">
+                            {{ $varGrandTotal > 0 ? number_format($varGrandTotal, 0, '.', ',') : '—' }}
+                        </td>
+                    </tr>
+
+                    {{-- Provisiones fijas --}}
+                    <tr class="bg-amber-50/40 dark:bg-amber-950/10">
+                        <td colspan="14" class="px-3 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest sticky left-0 z-10 bg-amber-50/40 dark:bg-amber-950/10">
+                            Provisiones Fijas / Genéricas
+                        </td>
+                    </tr>
+
+                    @php
+                        $fixedSegments = [
+                            'anticiclica' => ['label' => 'Prov. Anticíclica',          'code' => '149985'],
+                            'noreversada' => ['label' => 'Prov. No Reversada',         'code' => '149987'],
+                            'voluntaria'  => ['label' => 'Prov. Genérica Voluntaria',  'code' => '149989'],
+                            'tecnologia'  => ['label' => 'Prov. Tecnología Crediticia','code' => '149980'],
+                        ];
+                        $fixedTotals = array_fill(1, 12, 0.0);
+                    @endphp
+
+                    @foreach($fixedSegments as $seg => $meta)
+                        @php
+                            $rowSum = 0;
+                            for ($m = 1; $m <= 12; $m++) {
+                                $v = abs($simulationResults[$m]['provisions_acum'][$seg] ?? 0);
+                                $fixedTotals[$m] += $v;
+                                $rowSum += $v;
+                            }
+                        @endphp
+                        <tr class="hover:bg-amber-50/20 dark:hover:bg-amber-950/10">
+                            <td class="p-3 font-medium text-slate-700 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-[#0b132b]">
+                                {{ $meta['label'] }}
+                                <span class="text-[10px] text-slate-400 font-mono ml-1">{{ $meta['code'] }}</span>
+                            </td>
+                            @for($m = 1; $m <= 12; $m++)
+                                @php $v = abs($simulationResults[$m]['provisions_acum'][$seg] ?? 0); @endphp
+                                <td class="p-3 text-right tabular-nums {{ $v > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400' }}">
+                                    {{ $v > 0 ? number_format($v, 0, '.', ',') : '—' }}
+                                </td>
+                            @endfor
+                            <td class="p-3 text-right tabular-nums font-bold bg-slate-50 dark:bg-slate-800/40 {{ $rowSum > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400' }}">
+                                {{ $rowSum > 0 ? number_format($rowSum, 0, '.', ',') : '—' }}
+                            </td>
+                        </tr>
+                    @endforeach
+
+                    {{-- Subtotal fijas --}}
+                    @php $fixedGrandTotal = array_sum($fixedTotals); @endphp
+                    <tr class="bg-amber-50/40 dark:bg-amber-950/20 font-bold border-t border-amber-200/40 dark:border-amber-700/30">
+                        <td class="p-3 text-amber-700 dark:text-amber-400 sticky left-0 z-10 bg-amber-50/40 dark:bg-amber-950/20">Subtotal Fijas</td>
+                        @for($m = 1; $m <= 12; $m++)
+                            <td class="p-3 text-right tabular-nums {{ $fixedTotals[$m] > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400' }}">
+                                {{ $fixedTotals[$m] > 0 ? number_format($fixedTotals[$m], 0, '.', ',') : '—' }}
+                            </td>
+                        @endfor
+                        <td class="p-3 text-right tabular-nums bg-amber-100/60 dark:bg-amber-900/20 {{ $fixedGrandTotal > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-slate-400' }}">
+                            {{ $fixedGrandTotal > 0 ? number_format($fixedGrandTotal, 0, '.', ',') : '—' }}
+                        </td>
+                    </tr>
+
+                    {{-- TOTAL GENERAL --}}
+                    @php
+                        $grandTotals = array_fill(1, 12, 0.0);
+                        for ($m = 1; $m <= 12; $m++) {
+                            $grandTotals[$m] = $varTotals[$m] + $fixedTotals[$m];
+                        }
+                        $grandGrand = array_sum($grandTotals);
+                    @endphp
+                    <tr class="bg-slate-100 dark:bg-slate-900 font-extrabold border-t-2 border-slate-300 dark:border-slate-700 text-primary dark:text-[#85f8c4]">
+                        <td class="p-3 sticky left-0 z-10 bg-slate-100 dark:bg-slate-900">TOTAL PROVISIÓN ACUMULADA</td>
+                        @for($m = 1; $m <= 12; $m++)
+                            <td class="p-3 text-right tabular-nums">
+                                {{ $grandTotals[$m] > 0 ? number_format($grandTotals[$m], 0, '.', ',') : '—' }}
+                            </td>
+                        @endfor
+                        <td class="p-3 text-right tabular-nums bg-slate-200/60 dark:bg-slate-800">
+                            {{ $grandGrand > 0 ? number_format($grandGrand, 0, '.', ',') : '—' }}
+                        </td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Gasto Provisión Proyectada -->
+    <div class="bg-white dark:bg-[#0b132b] p-6 rounded-2xl shadow-sm border border-slate-200/40 space-y-4">
+        <div>
+            <h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary dark:text-[#85f8c4]">trending_down</span>
+                GASTO PROVISIÓN PROYECTADA {{ $budgetYear }}
+            </h3>
+            <p class="text-slate-400 text-xs mt-1">Variación mensual de la provisión acumulada. Positivo = gasto (aumenta la reserva). Negativo = recuperación (disminuye la reserva). Se integra en las cuentas 4402 del Presupuesto Maestro.</p>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+            <table class="w-full text-xs border-collapse">
+                <thead>
+                    <tr class="bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
+                        <th class="p-3 text-left sticky left-0 z-10 bg-slate-100 dark:bg-slate-900 min-w-[220px]">Segmento</th>
+                        @foreach(['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'] as $lbl)
+                            <th class="p-3 text-right min-w-[90px]">{{ $lbl }}</th>
+                        @endforeach
+                        <th class="p-3 text-right min-w-[100px] bg-slate-200/60 dark:bg-slate-800">Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+
+                    {{-- Gastos variables --}}
+                    <tr class="bg-slate-50/60 dark:bg-slate-800/20">
+                        <td colspan="14" class="px-3 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest sticky left-0 z-10 bg-slate-50/60 dark:bg-slate-800/20">
+                            Provisiones Variables (Cartera)
+                        </td>
+                    </tr>
+
+                    @php
+                        $gastoVarSegs = [
+                            'productive'   => ['label' => 'Cartera Productiva',    'code' => '440210'],
+                            'consumer'     => ['label' => 'Cartera Consumo',       'code' => '440220'],
+                            'microcredit'  => ['label' => 'Cartera Microcrédito',  'code' => '440240'],
+                            'refinanced'   => ['label' => 'Cartera Refinanciada',  'code' => '—'],
+                            'restructured' => ['label' => 'Cartera Reestructurada','code' => '—'],
+                        ];
+                        $gastoVarTotals = array_fill(1, 12, 0.0);
+                    @endphp
+
+                    @foreach($gastoVarSegs as $seg => $meta)
+                        @php
+                            $rowSum = 0;
+                            for ($m = 1; $m <= 12; $m++) {
+                                $v = $simulationResults[$m]['provision_gasto'][$seg] ?? 0;
+                                $gastoVarTotals[$m] += $v;
+                                $rowSum += $v;
+                            }
+                        @endphp
+                        <tr class="hover:bg-slate-50/30 dark:hover:bg-slate-800/10">
+                            <td class="p-3 font-medium text-slate-700 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-[#0b132b]">
+                                {{ $meta['label'] }}
+                                @if($meta['code'] !== '—')
+                                    <span class="text-[10px] text-slate-400 font-mono ml-1">{{ $meta['code'] }}</span>
+                                @endif
+                            </td>
+                            @for($m = 1; $m <= 12; $m++)
+                                @php $v = $simulationResults[$m]['provision_gasto'][$seg] ?? 0; @endphp
+                                <td class="p-3 text-right tabular-nums {{ $v > 0 ? 'text-rose-600 dark:text-rose-400' : ($v < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400') }}">
+                                    {{ $v != 0 ? number_format($v, 2, '.', ',') : '—' }}
+                                </td>
+                            @endfor
+                            <td class="p-3 text-right tabular-nums font-bold bg-slate-50 dark:bg-slate-800/40 {{ $rowSum > 0 ? 'text-rose-700 dark:text-rose-300' : ($rowSum < 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-400') }}">
+                                {{ $rowSum != 0 ? number_format($rowSum, 2, '.', ',') : '—' }}
+                            </td>
+                        </tr>
+                    @endforeach
+
+                    {{-- Subtotal variables --}}
+                    @php $gastoVarGrand = array_sum($gastoVarTotals); @endphp
+                    <tr class="bg-slate-100/60 dark:bg-slate-900/60 font-bold border-t border-slate-200 dark:border-slate-700">
+                        <td class="p-3 text-slate-600 dark:text-slate-300 sticky left-0 z-10 bg-slate-100/60 dark:bg-slate-900/60">Subtotal Variables</td>
+                        @for($m = 1; $m <= 12; $m++)
+                            <td class="p-3 text-right tabular-nums {{ $gastoVarTotals[$m] > 0 ? 'text-rose-700 dark:text-rose-300' : ($gastoVarTotals[$m] < 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-400') }}">
+                                {{ $gastoVarTotals[$m] != 0 ? number_format($gastoVarTotals[$m], 2, '.', ',') : '—' }}
+                            </td>
+                        @endfor
+                        <td class="p-3 text-right tabular-nums bg-slate-200/60 dark:bg-slate-800 {{ $gastoVarGrand > 0 ? 'text-rose-700 dark:text-rose-300' : ($gastoVarGrand < 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-400') }}">
+                            {{ $gastoVarGrand != 0 ? number_format($gastoVarGrand, 2, '.', ',') : '—' }}
+                        </td>
+                    </tr>
+
+                    {{-- Gastos fijos (siempre 0 — cuentas fijas no varían) --}}
+                    <tr class="bg-amber-50/40 dark:bg-amber-950/10">
+                        <td colspan="14" class="px-3 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest sticky left-0 z-10 bg-amber-50/40 dark:bg-amber-950/10">
+                            Provisiones Fijas / Genéricas — gasto = 0 (saldo constante)
+                        </td>
+                    </tr>
+
+                    @php
+                        $gastoFixedSegs = [
+                            'anticiclica' => 'Prov. Anticíclica',
+                            'noreversada' => 'Prov. No Reversada',
+                            'voluntaria'  => 'Prov. Genérica Voluntaria',
+                            'tecnologia'  => 'Prov. Tecnología Crediticia',
+                        ];
+                    @endphp
+
+                    @foreach($gastoFixedSegs as $seg => $label)
+                        <tr class="hover:bg-amber-50/20 dark:hover:bg-amber-950/10 opacity-60">
+                            <td class="p-3 font-medium text-slate-600 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-[#0b132b]">{{ $label }}</td>
+                            @for($m = 1; $m <= 12; $m++)
+                                <td class="p-3 text-right tabular-nums text-slate-400">—</td>
+                            @endfor
+                            <td class="p-3 text-right tabular-nums text-slate-400 bg-slate-50 dark:bg-slate-800/40">—</td>
+                        </tr>
+                    @endforeach
+
+                    {{-- TOTAL GASTO --}}
+                    <tr class="bg-slate-100 dark:bg-slate-900 font-extrabold border-t-2 border-slate-300 dark:border-slate-700 text-primary dark:text-[#85f8c4]">
+                        <td class="p-3 sticky left-0 z-10 bg-slate-100 dark:bg-slate-900">TOTAL GASTO PROVISIÓN</td>
+                        @for($m = 1; $m <= 12; $m++)
+                            <td class="p-3 text-right tabular-nums {{ $gastoVarTotals[$m] < 0 ? 'text-emerald-400' : '' }}">
+                                {{ $gastoVarTotals[$m] != 0 ? number_format($gastoVarTotals[$m], 2, '.', ',') : '—' }}
+                            </td>
+                        @endfor
+                        <td class="p-3 text-right tabular-nums bg-slate-200/60 dark:bg-slate-800">
+                            {{ $gastoVarGrand != 0 ? number_format($gastoVarGrand, 2, '.', ',') : '—' }}
+                        </td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @endif
+
     <!-- Recovery Projection Interactive Table -->
     <div class="bg-white dark:bg-[#0b132b] p-6 rounded-2xl shadow-sm border border-slate-200/40 space-y-4">
         <div class="flex justify-between items-center">
@@ -844,7 +1136,7 @@
             <div class="border-t border-slate-200/40 dark:border-slate-700/40 pt-4 space-y-3">
                 <div class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
                     <span class="material-symbols-outlined text-sm text-primary dark:text-[#85f8c4]">calculate</span>
-                    RATIO GLOBAL — valor aplicado en la simulación
+                    RATIO ÚLTIMO MES REAL — valor aplicado en la simulación
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     @foreach($histProv['globalRatios'] as $gr)
@@ -858,14 +1150,38 @@
         @endif
 
         {{-- Explicación metodológica --}}
-        <div class="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/40 rounded-xl p-4 text-xs text-blue-900 dark:text-blue-300 space-y-2">
-            <div class="font-bold flex items-center gap-1">
+        <div class="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/40 rounded-xl p-4 text-xs text-blue-900 dark:text-blue-300 space-y-3">
+            <div class="font-bold flex items-center gap-1 text-sm">
                 <span class="material-symbols-outlined text-base">info</span>
-                ¿Cómo se calcula el ratio y cómo se usa en la simulación?
+                ¿Cómo se calcula la provisión proyectada?
             </div>
-            <p><strong>Saldo promedio:</strong> Para cada cuenta y mes se promedia el saldo real de todos los años disponibles. Refleja el nivel típico de provisión de la institución en ese mes del año.</p>
-            <p><strong>Ratio mensual ponderado:</strong> <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Σ_años provisión[mes] / Σ_años cartera[mes]</code>. Los años con mayor volumen de cartera pesan más automáticamente, sin necesidad de asignar pesos explícitos.</p>
-            <p><strong>Ratio global (tarjetas):</strong> Igual pero acumulando todos los meses y todos los años: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Σ_todos provisión / Σ_todos cartera</code>. Es el escalar que multiplica la cartera proyectada en cada mes del presupuesto: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Provisión proyectada = Cartera proyectada × Ratio global</code>.</p>
+
+            <div class="space-y-1">
+                <p class="font-semibold text-blue-800 dark:text-blue-200">Tabla — Saldo promedio histórico</p>
+                <p>Cada celda muestra el promedio de los saldos reales de ese mes a lo largo de todos los años disponibles. Sirve como referencia del nivel típico de provisión de la institución.</p>
+            </div>
+
+            <div class="space-y-1">
+                <p class="font-semibold text-blue-800 dark:text-blue-200">Filas ámbar — Ratio mensual ponderado</p>
+                <p><code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">Σ_años provisión[mes] / Σ_años cartera[mes]</code> — referencia analítica histórica. <strong>No es el valor que usa la simulación.</strong></p>
+            </div>
+
+            <div class="space-y-1">
+                <p class="font-semibold text-blue-800 dark:text-blue-200">Tarjetas — Ratio del último mes real</p>
+                <p><code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">provisión_real / cartera_real</code> del último mes disponible en el histórico. Es el punto de arranque de la simulación.</p>
+            </div>
+
+            <div class="border-t border-blue-200/40 dark:border-blue-700/30 pt-3 space-y-2">
+                <p class="font-semibold text-blue-800 dark:text-blue-200">Fórmula de simulación — equivalente Excel: <code class="font-normal">(RecupProv / ProyCartCre) × ColocPorSegm</code></p>
+                <div class="bg-blue-100/60 dark:bg-blue-900/30 rounded-lg p-3 font-mono text-[11px] leading-5 space-y-0.5">
+                    <p><span class="text-blue-500 dark:text-blue-400 select-none">1. </span>cartera_dic  = cartera_oct + <em>n</em> × (cartera_oct × tasa_anual / 12)</p>
+                    <p><span class="text-blue-500 dark:text-blue-400 select-none">2. </span>ratio        = provisión_oct / cartera_dic</p>
+                    <p><span class="text-blue-500 dark:text-blue-400 select-none">3. </span>cartera[m]   = cartera_oct + (<em>n</em> + m) × (cartera_oct × tasa_anual / 12)</p>
+                    <p><span class="text-blue-500 dark:text-blue-400 select-none">4. </span>provisión[m] = (provisión[m−1] / cartera[m−1]) × cartera[m]</p>
+                    <p><span class="text-blue-500 dark:text-blue-400 select-none">5. </span>gasto[m]     = provisión[m] − provisión[m−1]</p>
+                </div>
+                <p><strong><em>n</em></strong> = meses desde el último mes histórico hasta diciembre (ej. si el histórico llega a octubre, <em>n</em> = 2; si llega a agosto, <em>n</em> = 4; si llega a diciembre, <em>n</em> = 0). La <strong>tasa anual</strong> proviene de los parámetros guardados en <em>Proyección de Cartera</em>. Si no hay proyección guardada, el sistema usa como fallback la regresión de master_budget_records.</p>
+            </div>
         </div>
     </div>
 

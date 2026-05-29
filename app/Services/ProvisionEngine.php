@@ -118,20 +118,40 @@ class ProvisionEngine
      */
     public function simulate($budgetYear)
     {
-        // Ratios de cobertura calculados sobre toda la historia disponible
         $histData = $this->calculateHistoricalData();
-        $ratios   = $histData['ratios'];
 
-        // Punto de arranque: calculado con el mismo método (cartera_hist × ratio) para que sea
-        // consistente con la proyección. Usar el saldo histórico real produciría un salto en enero
-        // igual a la diferencia entre el método de provisión real de la institución y este modelo.
-        $prevProvisions = [
-            'productive'   => ($histData['portfolio']['productive']   ?? 0) * $ratios['productive'],
-            'consumer'     => ($histData['portfolio']['consumer']     ?? 0) * $ratios['consumer'],
-            'microcredit'  => ($histData['portfolio']['microcredit']  ?? 0) * $ratios['microcredit'],
-            'refinanced'   => ($histData['portfolio']['refinanced']   ?? 0) * $ratios['refinanced'],
-            'restructured' => ($histData['portfolio']['restructured'] ?? 0) * $ratios['restructured'],
+        $segmentCodes = [
+            'productive'   => ['1401', '1449', '1425'],
+            'consumer'     => ['1402', '1426', '1450'],
+            'microcredit'  => ['1404', '1428', '1452'],
+            'refinanced'   => ['1410', '1412', '1434', '1436', '1458', '1460'],
+            'restructured' => ['1418', '1420', '1442', '1444', '1466', '1468'],
         ];
+
+        // ── Cartera sin tasas: saldo histórico del último período disponible ────
+        // prevPortfolio = cartera del último mes histórico (EEFun!AX40 en Excel = diciembre base)
+        // portfolioByMonth = mismo valor para todos los meses del año presupuesto (sin proyección por tasas)
+        // Esto replica la lógica del Excel donde el ratio prov/cartera es constante para segmentos sin ajuste.
+        $prevPortfolio = [];
+        $portfolioByMonth = [];
+        foreach ($segmentCodes as $seg => $codes) {
+            $base = $histData['portfolio'][$seg];
+            $prevPortfolio[$seg] = $base;
+            for ($m = 1; $m <= 12; $m++) {
+                $portfolioByMonth[$seg][$m] = $base;
+            }
+        }
+
+        // Provisión punto de arranque = último real de financial_histories (RecupProv!83)
+        $prevProvisions = [
+            'productive'   => $histData['provisions']['productive']   ?? 0,
+            'consumer'     => $histData['provisions']['consumer']     ?? 0,
+            'microcredit'  => $histData['provisions']['microcredit']  ?? 0,
+            'refinanced'   => $histData['provisions']['refinanced']   ?? 0,
+            'restructured' => $histData['provisions']['restructured'] ?? 0,
+        ];
+
+        $globalRatios = $histData['ratios']; // fallback si cartera histórica es cero
 
         // Cuentas fijas: su saldo real del último período histórico, sin variar
         $fixedProvisions = [
@@ -144,13 +164,12 @@ class ProvisionEngine
                                 ->value('saldo')),
         ];
 
-        // Cartera proyectada por segmento desde master_budget_records (regresión estadística)
-        $segmentCodes = [
-            'productive'   => ['1401', '1449', '1425'],
-            'consumer'     => ['1402', '1426', '1450'],
-            'microcredit'  => ['1404', '1428', '1452'],
-            'refinanced'   => ['1410', '1412', '1434', '1436', '1458', '1460'],
-            'restructured' => ['1418', '1420', '1442', '1444', '1466', '1468'],
+        // Factores de ajuste mensuales (Excel fila 84 y 86):
+        // Consumer meses 8-12: ×98%, ×98%, ×97%, ×96%, ×97%
+        // Microcredit meses 8-12: ×98%, ×95%, ×92%, ×92%, ×92%
+        $adjustmentFactors = [
+            'consumer'    => [8 => 0.98, 9 => 0.98, 10 => 0.97, 11 => 0.96, 12 => 0.97],
+            'microcredit' => [8 => 0.98, 9 => 0.95, 10 => 0.92, 11 => 0.92, 12 => 0.92],
         ];
 
         $results = [];
@@ -163,24 +182,29 @@ class ProvisionEngine
                 'provision_gasto' => [],
             ];
 
-            foreach ($segmentCodes as $segment => $codes) {
-                $monthData['portfolio'][$segment] = (float) MasterBudgetRecord::where('año', $budgetYear)
-                    ->where('mes', $m)
-                    ->whereIn('codigo', $codes)
-                    ->sum('saldo');
+            // ColocPorSegm[m]: cartera real del mes m desde financial_histories
+            foreach (array_keys($segmentCodes) as $segment) {
+                $monthData['portfolio'][$segment] = $portfolioByMonth[$segment][$m];
             }
 
-            // Provisión = cartera proyectada × ratio histórico ponderado
-            foreach ($ratios as $segment => $ratio) {
-                $acum  = $monthData['portfolio'][$segment] * $ratio;
-                $gasto = $acum - $prevProvisions[$segment];
+            // prov[m] = (prov[m-1] / ProyCartCre[m-1]) × ColocPorSegm[m] × factor_ajuste
+            foreach (array_keys($segmentCodes) as $segment) {
+                $prevPort = $prevPortfolio[$segment];
+                $ratio    = $prevPort > 0
+                    ? ($prevProvisions[$segment] / $prevPort)
+                    : $globalRatios[$segment];
+
+                $factor = $adjustmentFactors[$segment][$m] ?? 1.0;
+                $acum   = $monthData['portfolio'][$segment] * $ratio * $factor;
+                $gasto  = $acum - $prevProvisions[$segment];
 
                 $monthData['provisions_acum'][$segment] = $acum;
                 $monthData['provision_gasto'][$segment] = $gasto;
                 $prevProvisions[$segment] = $acum;
+                $prevPortfolio[$segment]  = $monthData['portfolio'][$segment];
             }
 
-            // Cuentas fijas: saldo real del último histórico, gasto = variación vs mes anterior
+            // Cuentas fijas: saldo constante = valor real del último período, gasto = 0
             foreach ($fixedProvisions as $segment => $baseVal) {
                 $monthData['provisions_acum'][$segment] = $baseVal;
                 $monthData['provision_gasto'][$segment] = 0;

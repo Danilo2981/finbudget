@@ -19,5 +19,6 @@ Route::get('/budget', \App\Livewire\BudgetSimulator::class)
     ->name('budget');
 Route::get('/master-budget', \App\Livewire\MasterBudget::class)->name('master.budget');
 Route::get('/recuperacion-provisiones', \App\Livewire\RecupProvSimulator::class)->name('recup-prov');
+Route::get('/proy-cart-cre', \App\Livewire\ProyCartCre::class)->name('proy-cart-cre');
 
 require __DIR__.'/auth.php';

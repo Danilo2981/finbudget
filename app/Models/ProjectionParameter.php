@@ -33,7 +33,11 @@ class ProjectionParameter extends Model
         'reversal_provisions',
         'tech_investment',
         'image_investment',
-        'operating_expenses'
+        'operating_expenses',
+        'auto_credits_per_exec',
+        'auto_exec_count',
+        'auto_avg_credit_value',
+        'auto_months',
     ];
 
     public function projection()
